@@ -3,51 +3,48 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-import model
+from model import GCN
 
-train_data = torch.rand((10,10))    # 10 nodes, each node has 10 features
-train_label = torch.rand((10,1))
+# train_data = torch.rand((10,10))    # 10 nodes, each node has 10 features
+# train_label = torch.rand((10,1))
+# adj_matrix = np.eye(10)
 
-adj_matrix = np.eye(10)
+data = np.load("../data/raw/one-hot-encoding.npy")
+adj_matrix = data.dot(data.T)
+adj_matrix = adj_matrix / np.max(adj_matrix)
 
-gcn = model.GCN(10, 5, adj_matrix)
+gcn = GCN(data.shape[1], 300, adj_matrix)
 
 optimizer = optim.Adam(gcn.parameters(), lr=0.01)
 criteria = nn.MSELoss()
 
+def train_block(loop):
+    y = gcn(data)
+    # loss = criteria(gcn.gc1.adj_matrix, y)
+    loss = torch.sum((gcn.gc1.adj_matrix-y)**2)
+    print(f"    #{loop+1:3d} - loss: {loss}")
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
 
-# maximization
-gcn.maximization()
-y = gcn(train_data)
-loss = criteria(train_label, y)
-optimizer.zero_grad()
-loss.backward()
-for param in gcn.parameters():
-    print(param.grad)
-optimizer.step()
+print("Start training...")
+data = torch.from_numpy(data).type(torch.FloatTensor)
+for epoch in range(50):
+    print(f"Epoch #{epoch:3d}")
+    # maximization
+    print("  Maximization")
+    gcn.maximization()
+    for i in range(100):
+        train_block(i)
 
-# print(list(gcn.parameters()))
+    # expectation
+    print("  Expectation")
+    gcn.expectation()
+    for i in range(100):
+        train_block(i)
 
-# expectation
-gcn.expectation()
-y = gcn(train_data)
-loss = criteria(train_label, y)
-optimizer.zero_grad()
-loss.backward()
-for param in gcn.parameters():
-    print(param.grad)
-optimizer.step()
-
-# print(list(gcn.parameters()))
-
-# maximization
-gcn.maximization()
-y = gcn(train_data)
-loss = criteria(train_label, y)
-optimizer.zero_grad()
-loss.backward()
-for param in gcn.parameters():
-    print(param.grad)
-optimizer.step()
-
-# print(list(gcn.parameters()))
+output = gcn(data)
+np.save("output.npy", output.detach().numpy())
+print("output saved")
+torch.save(gcn.state_dict(), "../checkpoints/testing_model.pt")
+print("model saved")

@@ -7,6 +7,7 @@ class GraphConvolutionLayer(nn.Module):
     def __init__(self, in_features, out_features, adj_matrix):
         super(GraphConvolutionLayer, self).__init__()
         self.adj_matrix = nn.Parameter(torch.from_numpy(adj_matrix).type(torch.sparse.FloatTensor))
+        self.register_parameter("adj_matrix", self.adj_matrix)
         self.weight = nn.Parameter(torch.FloatTensor(in_features, out_features))
         self.bias = nn.Parameter(torch.FloatTensor(out_features))
         nn.init.xavier_uniform_(self.weight)
