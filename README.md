@@ -2,7 +2,12 @@
 
 ## Model
 
-![model_illustration](res/gcn_whitebg.png)
+Our model architecture consists of two components: a post encoder $E_{POST}$ and a context encoder $E_{CONTEXT}$.  
+The post encoder is a 3-layer graph convolutional network(GCN), which take as input of a 2-D one-hot matrix $X_{POST}$ where each row denotes a post and each row is a user. This input matrix shows how many and which users are involved in a certain post. We use traditional backpropagation algorithm to train the network weights $W^{(l)}$ in each layer.
+
+$$H^{(l+1)} = \sigma [ \hat D^{-\frac12} \hat A \hat D^{-\frac12} H^{(l)} W^{(l)} ]$$
+
+The context encoder 
 
 ## Method
 
