@@ -37,3 +37,27 @@ class GCN(nn.Module):
         x = torch.mm(x, x.t())
         x = x / torch.max(x)
         return x
+
+class Dense(nn.Module):
+    def __init__(self, in_features):
+        super(Dense, self).__init__()
+        self.fc1 = nn.Linear(in_features, 152)
+        self.fc2 = nn.Linear(152, 48)
+        self.fc3 = nn.Linear(48, 1)
+        nn.init.kaiming_normal_(self.fc1.weight)
+        nn.init.kaiming_normal_(self.fc2.weight)
+        nn.init.kaiming_normal_(self.fc3.weight)
+    
+    def forward(self, x):
+        x = self.fc1(x)
+        x = F.relu(x)
+        x = self.fc2(x)
+        x = F.relu(x)
+        x = self.fc3(x)
+        return x
+
+class OurModel(nn.Module):
+    def __init__(self, in_features, out_features, adj_matrix):
+        super(OurModel, self).__init__()
+        self.gcn = GCN(in_features, out_features, adj_matrix)
+        self.dense = Dense(out_features)

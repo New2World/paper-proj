@@ -9,19 +9,20 @@ from model import GCN
 # train_label = torch.rand((10,1))
 # adj_matrix = np.eye(10)
 
-data = np.load("../data/raw/one-hot-encoding.npy")
+raw_data = np.load("../data/one-hot-encoding.npz")
+data = raw_data["encoding"]
+popularity = raw_data["popularity"]
 adj_matrix = data.dot(data.T)
 adj_matrix = adj_matrix / np.max(adj_matrix)
 
 gcn = GCN(data.shape[1], 300, adj_matrix)
 
-optimizer = optim.Adam(gcn.parameters(), lr=0.01)
+optimizer = optim.Adam(gcn.parameters(), lr=0.001)
 criteria = nn.MSELoss()
 
 def train_block(loop):
     y = gcn(data)
-    # loss = criteria(gcn.gc1.adj_matrix, y)
-    loss = torch.sum((gcn.gc1.adj_matrix-y)**2)
+    loss = criteria(gcn.gc1.adj_matrix, y)
     print(f"    #{loop+1:3d} - loss: {loss}")
     optimizer.zero_grad()
     loss.backward()
@@ -46,5 +47,5 @@ for epoch in range(50):
 output = gcn(data)
 np.save("output.npy", output.detach().numpy())
 print("output saved")
-torch.save(gcn.state_dict(), "../checkpoints/testing_model.pt")
+torch.save(gcn.state_dict(), "../checkpoints/model.pt")
 print("model saved")

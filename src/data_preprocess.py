@@ -5,8 +5,8 @@ dataset = "avengers"
 if len(sys.argv) > 1:
     dataset = sys.argv[1]
 
-main_post = dataset+'/'+dataset+".json"
-comms_path = dataset+'/'+dataset+'/'
+main_post = "../data/raw/"+dataset+'/'+dataset+".json"
+comms_path = "../data/raw/"+dataset+'/'+dataset+'/'
 
 def rename_comms(comms_path):
     files = list(os.walk(comms_path))[0][2]
@@ -55,14 +55,14 @@ def generate_input_matrix(posts, all_users):
 # rename_comms(comms_path)
 
 posts = get_info_from_main_post(main_post)
-# with open("post_id.txt","w") as pfd:
-#     pfd.write(' '.join(posts.keys()))
-# exit(1)
+with open("post_id.txt","w") as pfd:
+    pfd.write(' '.join(posts.keys()))
 print(f"all posts: {len(posts)}")
+popularity = np.array([val[0] for val in posts.values()])
 posts = get_info_from_comms(comms_path, posts)
 all_users = list_all_users(posts)
 print(f"all users: {len(all_users)}")
 encoding = generate_input_matrix(posts, all_users)
-np.save("one-hot-encoding.npy", encoding)
+np.savez("../data/one-hot-encoding.npz", encoding=encoding, popularity=popularity)
 
     
