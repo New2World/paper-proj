@@ -23,3 +23,17 @@ Our goals are to 1) predict popularity of each post; 2) learn the latent relatio
 During maximization phrase, we first generate the input of post encoder as one-hot matrix $X_{POST} \in R^{|M|\times|N|}$ and initialize the adjacent matrix $\hat A$ in GCN with the inner product of $X_{POST}$. Meanwhile we map characters in each post to one-hot vectors and input the sequence of one-hot vectors into our context encoder. After forward propagation we get two distinguished embedding. Concatenate embeddings post by post (row by row) we get a new matrix with size $|M|\times(d_{POST}+d_{CONTEXT})$, and this will be the input of regressior. We measure our loss by calculating mean squared error (MSE) between the prediction and ground truth among all posts. By backpropagation, gradients are propagated back to the very beginning and all parameters except the adjacent matrix are updated to minimize the loss. This training process will be performed until the model converge.
 
 In expectation phrase, all inputs and outputs are the same with those in maximization phrase, however, the only difference is the parameters that need to be updated. Our maximization phrase is based on the correlation assumption encoded in the adjacent matrix, so in expectation step it is the adjacent matrix that should be updated, while other parameters are fixed.
+
+## Experiment
+
+### Convergency
+
+First we should make sure the EM process converge after limited iterations. We only use the post encoder to generate embeddings $H$, input a one-hot matrix that each row represents a post by activating all users involved and each column shows all posts a user participate in and output post embeddings. The adjacent matrix in GCN is initialized by the correlation matrix of our input. Loss of this model is the mean squared error between the learned adjacent matrix and the correlation matrix represented by the embedding. We use this loss in both expectation and maximization phrases.
+
+$$loss = MSE(HH^T-A)$$
+
+### Results
+
+The loss keeps decreasing from $xxx$ to $xxx$ in both expectation and maximization phrases. We get the correlation matrix of posts from the inner product of output embeddings, and the mean squared error between correlation matrix and learned adjacent matrix in GCN is $xxx$. Shown in Figure 1, the light points means higher difference while the dark parts means lower difference.
+
+![Figure 1](res/adj_diff.png)
