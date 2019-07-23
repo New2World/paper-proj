@@ -12,7 +12,7 @@ The **post encoder** is a 3-layer graph convolutional network (GCN), which take 
 
 $$H^{(l+1)} = \sigma [ \hat D^{-\frac12} \hat A \hat D^{-\frac12} H^{(l)} W^{(l)} ]$$
 
-The **context encoder** use post context information to build the correlationship between posts. To avoid the variance of learning word embedding from scratch and the bias of introducing existing word2vec, we train our context encoder in character level. Characters are transformed into one-hot vectors so we can get a sequence of one-hot vectors $X_{CONTEXT}$ for each post. Using the model proposed by _Yann LeCun et, al. 2015_, a 1-D convolutional network is applied to the input to extract text features and output post embedding $H_{CONTEXT} \in \mathbb R^{d_{CONTEXT}}$.
+The **context encoder** use post context information to build the correlationship between posts. To avoid the variance of learning word embedding from scratch and the bias of introducing existing word2vec, we train our context encoder in character level. Characters are transformed into one-hot vectors so we can get a sequence of one-hot vectors $X_{CONTEXT}$ for each post. Using the model proposed by _X Zhang et, al. 2015_, a 1-D convolutional network is applied to the input to extract text features and output post embedding $H_{CONTEXT} \in \mathbb R^{d_{CONTEXT}}$.
 
 By concatenating outputs from above two encoders, the **regressior** learns with information from both user aspect and context. We build 3 fully connected layers to learn the popularity of each post given the cancatenated embedding representations, so the output is vector $\hat y \in \mathbb R^{|M|}$ and each dimension is a real number indicating the prediction of popularity.
 
