@@ -38,6 +38,13 @@ class GCN(nn.Module):
         x = x / torch.max(x)
         return x
 
+class TextCNN(nn.Module):
+    def __init__(self):
+        super(TextCNN, self).__init__()
+    
+    def forward(self, x):
+        return x
+
 class Dense(nn.Module):
     def __init__(self, in_features):
         super(Dense, self).__init__()
@@ -57,7 +64,9 @@ class Dense(nn.Module):
         return x
 
 class OurModel(nn.Module):
-    def __init__(self, in_features, out_features, adj_matrix):
+    def __init__(self, in_features, post_features, context_features, adj_matrix):
         super(OurModel, self).__init__()
-        self.gcn = GCN(in_features, out_features, adj_matrix)
-        self.dense = Dense(out_features)
+        self.n_nodes = adj_matrix.size(0) if isinstance(adj_matrix, torch.FloatTensor) else adj_matrix.shape[0]
+        self.gcn = GCN(in_features, post_features, adj_matrix)
+        self.cnn1d = TextCNN()
+        self.dense = Dense(post_features+context_features, self.n_nodes)
