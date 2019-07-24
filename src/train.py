@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from model import GCN
+from model import OurModel
 
 # train_data = torch.rand((10,10))    # 10 nodes, each node has 10 features
 # train_label = torch.rand((10,1))
@@ -11,18 +11,21 @@ from model import GCN
 
 raw_data = np.load("../data/one-hot-encoding.npz")
 data = raw_data["encoding"]
-popularity = raw_data["popularity"]
+popularity = torch.from_numpy(raw_data["popularity"][:,np.newaxis]).type(torch.FloatTensor)
 adj_matrix = data.dot(data.T)
 adj_matrix = adj_matrix / np.max(adj_matrix)
 
-gcn = GCN(data.shape[1], 300, adj_matrix)
+gcn = OurModel(data.shape[1], 300, 300, adj_matrix)
 
-optimizer = optim.Adam(gcn.parameters(), lr=0.001)
+e_opt = optim.Adam(gcn.parameters(), lr=1e-4)
+m_opt = optim.Adam(gcn.parameters(), lr=1e-3)
+e_schedule = optim.lr_scheduler.StepLR(e_opt, 3)
+m_schedule = optim.lr_scheduler.StepLR(m_opt, 3)
 criteria = nn.MSELoss()
 
-def train_block(loop):
+def train_block(loop, optimizer):
     y = gcn(data)
-    loss = criteria(gcn.gc1.adj_matrix, y)
+    loss = criteria(popularity, y)
     print(f"    #{loop+1:3d} - loss: {loss}")
     optimizer.zero_grad()
     loss.backward()
@@ -30,19 +33,24 @@ def train_block(loop):
 
 print("Start training...")
 data = torch.from_numpy(data).type(torch.FloatTensor)
-for epoch in range(50):
-    print(f"Epoch #{epoch:3d}")
+for epoch in range(10):
+    print(f"Epoch #{epoch+1:3d}")
     # maximization
     print("  Maximization")
     gcn.maximization()
-    for i in range(100):
-        train_block(i)
+    for i in range(20):
+        train_block(i, m_opt)
 
     # expectation
     print("  Expectation")
     gcn.expectation()
-    for i in range(100):
-        train_block(i)
+    for i in range(50):
+        train_block(i, e_opt)
+    
+    e_schedule.step()
+    m_schedule.step()
+
+    torch.save(gcn.state_dict(), f"../checkpoints/model_ep{epoch+1}.pt")
 
 output = gcn(data)
 np.save("output.npy", output.detach().numpy())
