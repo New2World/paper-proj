@@ -5,13 +5,13 @@ import torch
 
 from model import GCN
 
-data = np.load("../data/raw/one-hot-encoding.npy")
+data = np.load("../data/one-hot-encoding.npz")["encoding"]
 adj_matrix = data.dot(data.T)
 adj_matrix = adj_matrix / np.max(adj_matrix)
 
 gcn = GCN(data.shape[1], 300, adj_matrix)
 
-gcn.load_state_dict(torch.load("../checkpoints/testing_model.pt"))
+gcn.load_state_dict(torch.load("../checkpoints/model.pt"))
 learned_adj = gcn.gc1.adj_matrix.detach().numpy()
 
 partial_learned = learned_adj[:100,:100]
