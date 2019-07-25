@@ -32,8 +32,22 @@ First we should make sure the EM process converge after limited iterations. We o
 
 $$loss = MSE(HH^T-A)$$
 
-### Results
+### Popularity prediction with GCN only
 
-The loss keeps decreasing from $xxx$ to $xxx$ in both expectation and maximization phrases. We get the correlation matrix of posts from the inner product of output embeddings, and the mean squared error between correlation matrix and learned adjacent matrix in GCN is $xxx$. Shown in Figure 1, the light points means higher difference while the dark parts means lower difference.
+To evaluate the performance of GCN in capturing relation of posts and predicting popularity, we apply fully connected layers right after our post encoder. With the same input, the fully connected network will output one real number which is the prediction of a certain post. As our experiment suggests, the learning rates for expectation and maximization phrases are different. Empirically, the update of adjacent matrix in each step is smaller than that of other parameters so we set the learning rate in expectation phrase to $0.0001$ while for maximization it is $0.001$.
+
+## Results
+
+### Convergency
+
+The loss keeps decreasing from $0.032$ to $10^{-18}$ in both expectation and maximization phrases. We get the correlation matrix of posts from the inner product of output embeddings, and the mean squared error between correlation matrix and learned adjacent matrix in GCN is $xxx$. Shown in Figure 1, the light points means higher difference while the dark parts means lower difference.
 
 ![Figure 1](res/adj_diff.png)
+
+### Popularity prediction with GCN only
+
+Popularity prediction is a regression task so the evaluation metric we use is mean squared error (MSE). We perform 10 iteration of EM process, and in each iteration expectation runs 50 epochs and maximization runs 20 epochs. The final MSE on Reddit dataset is $205.05$.
+
+![Figure 2](res/popularity_prediction.png)
+
+![Figure 3](res/popularity_prediction_100.png)
