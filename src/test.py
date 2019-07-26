@@ -11,6 +11,7 @@ raw_data = np.load("../data/one-hot-encoding.npz")
 data = raw_data["encoding"]
 popularity = raw_data["popularity"]
 n_threads = data.shape[0]
+adj_matrix = data @ data.T
 
 gcn = OurModel(data.shape[1], 300, 300, np.eye(n_threads))
 gcn.load_state_dict(torch.load("../checkpoints/model.pt"))
