@@ -42,14 +42,12 @@ To evaluate the performance of GCN in capturing relation of posts and predicting
 
 The loss keeps decreasing from $0.032$ to $10^{-18}$ in both expectation and maximization phrases. We get the correlation matrix of posts from the inner product of output embeddings, and the mean squared error between correlation matrix and learned adjacent matrix in GCN is $xxx$. Shown in Figure 1, the light points means higher difference while the dark parts means lower difference.
 
-![Figure 1](res/adj_diff.png)
-
 ### Popularity prediction with GCN only
 
 Popularity prediction is a regression task so the evaluation metric we use is mean absolute error (MAE). We perform 10 iteration of EM process, and in each iteration expectation runs 50 epochs and maximization runs 20 epochs. The final MAE on Reddit dataset is $5.71$.
 
-![Figure 2](res/popularity_prediction.png)
+![popularity prediction 100](res/popularity_prediction_100.png)
 
-![Figure 3](res/popularity_prediction_100.png)
+![initial adjacent matrix](res/initial_adjacent_matrix.png)
 
-![Figure 4](res/learned_adj.png)
+![learned adjacent matrix](res/learned_adjacent_matrix.png)
