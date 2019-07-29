@@ -4,6 +4,7 @@ import numpy as np
 thread_id = []
 context = []
 author = []
+popularity = []
 users = set()
 reply = []
 ll = 69
@@ -14,6 +15,7 @@ with open('../data/raw/avengers/avengers.json', 'r') as jf:
         if json_obj['numComms'] == 0:
             continue
         thread_id.append(json_obj['sub_id'])
+        popularity.append(json_obj['numComms'])
         context.append(json_obj['title']+' '+json_obj['text'])
         author.append(json_obj['author'])
         users.add(json_obj['author'])
@@ -31,12 +33,12 @@ for i, thread in enumerate(thread_id):
         hot_reply.append(author[i])
     reply.append(hot_reply)
 
-with open('../data/thread_id.txt', 'w') as fd:
-    fd.write(','.join(thread_id))
-with open('../data/author_id.txt', 'w') as fd:
-    fd.write(','.join(author))
-with open('../data/user_id.txt', 'w') as fd:
-    fd.write(','.join(users))
+# with open('../data/thread_id.txt', 'w') as fd:
+#     fd.write(','.join(thread_id))
+# with open('../data/author_id.txt', 'w') as fd:
+#     fd.write(','.join(author))
+# with open('../data/user_id.txt', 'w') as fd:
+#     fd.write(','.join(users))
 
 user_dict = dict(zip(users, range(len(users))))
 
@@ -48,12 +50,13 @@ def char2onehot(cseq):
         ss = [0]*ll
         ss[dictionary[c]] = 1
         seq.append(ss)
-    return seq
+    return np.array(seq)
 
 context_matrix = np.array([char2onehot(seq) for seq in context])
 np.save('../data/context_matrix.npy', context_matrix)
-post_matrix = np.zeros((len(thread_id),len(users)))
-post_index = [[user_dict[usr] for usr in usrs] for usrs in reply]
-for i, idx in enumerate(post_index):
-    post_matrix[i,idx] = 1
-np.save('../data/first-5-reply-matrix.npy', post_matrix)
+# post_matrix = np.zeros((len(thread_id),len(users)))
+# post_index = [[user_dict[usr] for usr in usrs] for usrs in reply]
+# for i, idx in enumerate(post_index):
+#     post_matrix[i,idx] = 1
+# np.save('../data/first-5-reply-matrix.npy', post_matrix)
+# np.save('../data/popularity.npy', np.array(popularity))
