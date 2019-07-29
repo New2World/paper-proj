@@ -6,6 +6,7 @@ context = []
 author = []
 popularity = []
 users = set()
+all_reply = []
 reply = []
 ll = 69
 dictionary = dict(zip("abcdefghijklmnopqrstuvwxyz0123456789-,;.!?:\"'/\\|_@#$%ˆ&*~`+-=<>()[]{}", range(ll)))
@@ -32,6 +33,7 @@ for i, thread in enumerate(thread_id):
         hot_reply = hot_reply[:-1]
         hot_reply.append(author[i])
     reply.append(hot_reply)
+    all_reply.append(list(map(lambda x: x[0], comms)))
 
 # with open('../data/thread_id.txt', 'w') as fd:
 #     fd.write(','.join(thread_id))
@@ -52,11 +54,12 @@ def char2onehot(cseq):
         seq.append(ss)
     return np.array(seq)
 
-context_matrix = np.array([char2onehot(seq) for seq in context])
-np.save('../data/context_matrix.npy', context_matrix)
-# post_matrix = np.zeros((len(thread_id),len(users)))
-# post_index = [[user_dict[usr] for usr in usrs] for usrs in reply]
-# for i, idx in enumerate(post_index):
-#     post_matrix[i,idx] = 1
+# context_matrix = np.array([char2onehot(seq) for seq in context])
+# np.save('../data/context_matrix.npy', context_matrix)
+post_matrix = np.zeros((len(thread_id),len(users)))
+post_index = [[user_dict[usr] for usr in usrs] for usrs in all_reply]
+for i, idx in enumerate(post_index):
+    post_matrix[i,idx] = 1
+np.save('../data/onehot-encoding.npy', post_matrix)
 # np.save('../data/first-5-reply-matrix.npy', post_matrix)
 # np.save('../data/popularity.npy', np.array(popularity))

@@ -16,14 +16,17 @@ adj_matrix = adj_matrix / np.max(adj_matrix)
 gcn = OurModel(data.shape[1], 300, 300, 300, np.eye(n_threads))
 gcn.load_state_dict(torch.load("../checkpoints/model_ep10.pt"))
 gcn.eval().cuda()
-output = gcn(torch.from_numpy(data).type(torch.FloatTensor).cuda()).detach().cpu().numpy().squeeze()
+output = np.rint(gcn(torch.from_numpy(data).type(torch.FloatTensor).cuda()).detach().cpu().numpy().squeeze())
 learned_adj = gcn.gcn.gc1.adj_matrix.detach().cpu().numpy()
 partial_learned = learned_adj[:100,:100]
 # partial_learned[partial_learned<.0001] = partial_learned[partial_learned<.0001]*10
 
 # output = np.load("../res/prediction.npy")
 mae = np.mean(np.abs(popularity[:100]-output[:100]))
+max_diff = np.max(np.abs(popularity[:100]-output[:100]))
+min_diff = np.min(np.abs(popularity[:100]-output[:100]))
 print(f"MAE loss: {mae}")
+print(f"min/max loss: {min_diff} / {max_diff}")
 matplotlib.rcParams['font.family'] = 'Times New Roman'
 matplotlib.rcParams['font.size'] = 16
 plt.xlabel('thread ID')
