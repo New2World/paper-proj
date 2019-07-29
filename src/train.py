@@ -5,10 +5,6 @@ import torch.optim as optim
 
 from model import OurModel
 
-# train_data = torch.rand((10,10))    # 10 nodes, each node has 10 features
-# train_label = torch.rand((10,1))
-# adj_matrix = np.eye(10)
-
 raw_data = np.load("../data/one-hot-encoding.npz")
 data = raw_data["encoding"]
 popularity = torch.from_numpy(raw_data["popularity"][:,np.newaxis]).type(torch.FloatTensor)

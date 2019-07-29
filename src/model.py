@@ -37,43 +37,62 @@ class GCN(nn.Module):
         self.gc1 = GraphConvolutionLayer(in_features, 1024, np.copy(adj_matrix))
         self.gc2 = GraphConvolutionLayer(1024, 512, np.copy(adj_matrix))
         self.gc3 = GraphConvolutionLayer(512, out_features, np.copy(adj_matrix))
-        # self.dense = nn.Linear(out_features, 1)
     
     def expectation(self):
         self.gc1.expectation()
         self.gc2.expectation()
         self.gc3.expectation()
-        # for param in self.dense.parameters():
-        #     param.requires_grad_(False)
     
     def maximization(self):
         self.gc1.maximization()
         self.gc2.maximization()
         self.gc3.maximization()
-        # for param in self.dense.parameters():
-        #     param.requires_grad_()
     
     def forward(self, x):
         x = torch.tanh(self.gc1(x))
         x = torch.tanh(self.gc2(x))
         x = self.gc3(x)
-        # x = F.dropout(x, p=.5)
-        # x = self.dense(x)
-        # x = torch.mm(x, x.t())
-        # x = x / torch.max(x)
         return x
 
 class TextCNN(nn.Module):
-    def __init__(self):
+    def __init__(self, in_channels, out_channels):
         super(TextCNN, self).__init__()
+        self.conv1 = nn.Conv1d(in_channels, 69, kernel_size=7)
+        self.conv2 = nn.Conv1d(69, 256, kernel_size=7)
+        self.mid_layers = nn.Sequential()
+        for i in range(4):
+            self.mid_layers.add_module(
+                f'mid_conv{i+1}', 
+                nn.Conv1d(256, 256, kernel_size=3)
+            )
+        nn.init.kaiming_normal_(self.conv1.weight)
+        nn.init.kaiming_normal_(self.conv2.weight)
+        for m in self.mid_layers.modules():
+            nn.init.kaiming_normal_(m.weight)
     
     def expectation(self):
-        pass
+        for p in self.conv1.parameters():
+            p.requires_grad_(False)
+        for p in self.conv2.parameters():
+            p.requires_grad_(False)
+        for p in self.mid_layers.parameters():
+            p.requires_grad_(False)
     
     def maximization(self):
-        pass
+        for p in self.conv1.parameters():
+            p.requires_grad_()
+        for p in self.conv2.parameters():
+            p.requires_grad_()
+        for p in self.mid_layers.parameters():
+            p.requires_grad_()
 
     def forward(self, x):
+        x = self.conv1(x)
+        x = F._max_pool1d(x, kernel_size=3)
+        x = self.conv2(x)
+        x = F._max_pool1d(x, kernel_size=3)
+        x = self.mid_layers(x)
+        x = F._max_pool1d(x, kernel_size=7)
         return x
 
 class Dense(nn.Module):
@@ -111,11 +130,11 @@ class Dense(nn.Module):
         return x
 
 class OurModel(nn.Module):
-    def __init__(self, in_features, post_features, context_features, adj_matrix):
+    def __init__(self, post_features, context_features, post_embedding, context_embedding, adj_matrix):
         super(OurModel, self).__init__()
-        self.gcn = GCN(in_features, post_features, adj_matrix)
-        self.txcnn = TextCNN()
-        self.dense = Dense(post_features)
+        self.gcn = GCN(post_features, post_embedding, adj_matrix)
+        self.txcnn = TextCNN(context_features, context_embedding)
+        self.dense = Dense(post_embedding+context_embedding)
     
     def maximization(self):
         self.gcn.maximization()
@@ -128,7 +147,9 @@ class OurModel(nn.Module):
         self.dense.expectation()
 
     def forward(self, x):
-        x = self.gcn(x)
-        x = F.dropout(x)
-        x = self.dense(x)
-        return x
+        g = self.gcn(x)
+        t = self.txcnn(x)
+        d = torch.cat((g,t), 0)
+        d = F.dropout(d)
+        d = self.dense(d)
+        return d
