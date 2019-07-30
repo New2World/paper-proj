@@ -2,8 +2,16 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.data import DataLoader, Dataset
 
 from model import OurModel
+
+def DataSet(Dataset):
+    def __init__(self, validation=.2):
+        self.usr_onehot = np.load("../data/onehot-encoding.npy")
+        self.hotreply = np.load("../data/first-5-reply-matrix.npy")
+        self.popularity = np.load("../data/popularity.npy")
+        self.length = 
 
 raw_data = np.load("../data/one-hot-encoding.npz")
 data = raw_data["encoding"]
