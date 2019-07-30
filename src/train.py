@@ -8,60 +8,75 @@ from model import OurModel
 
 class DataSet(Dataset):
     def __init__(self, validation=.2):
-        self.allreply = torch.from_numpy(np.load("../data/onehot-encoding.npy")).type(torch.FloatTensor)
-        self.hotreply = torch.from_numpy(np.load("../data/first-5-reply-matrix.npy")).type(torch.FloatTensor)
+        self.allreply = torch.from_numpy(np.load("../data/onehot_encoding.npy")).type(torch.FloatTensor)
+        self.hotreply = torch.from_numpy(np.load("../data/first_5_reply_matrix.npy")).type(torch.FloatTensor)
         self.popularity = np.load("../data/popularity.npy")
-        self.context = np.load("../data/context-matrix.npy")
+        self.context = np.load("../data/context_matrix.npy", allow_pickle=True)
         self.length = self.hotreply.size(0)
         self.validation = 1-validation
+        self.fixlen = 204
     
     def __len__(self):
-        return self.length * self.validation
+        return int(self.length * self.validation)
     
-    def __getitem__(self, id):
-        context = self.context[id]
-        if context.shape[0] < 200:
-            context = np.stack((context, np.zeros((200-context.shape[0],69))), axis=0)
-        elif context.shape[0] > 200:
-            context = context[:200]
+    def __getitem__(self, idx):
+        context = self.context[idx]
+        if context.shape[0] == 0:
+            context = np.zeros((self.fixlen,69))
+        elif context.shape[0] < self.fixlen:
+            context = np.vstack((context, np.zeros((self.fixlen-context.shape[0],69))))
+        elif context.shape[0] > self.fixlen:
+            context = context[:self.fixlen]
         return {
-            'hot-reply': self.hotreply[id].cuda(),
-            'all-reply': self.allreply[id].cuda(),
-            'context': torch.from_numpy(context).type(torch.FloatTensor).cuda(),
-            'popularity': self.popularity[id].cuda()
+            'index': idx,
+            # 'hotreply': self.hotreply[idx].cuda(),
+            # 'allreply': self.allreply[idx].cuda(),
+            'context': torch.from_numpy(context.T).type(torch.FloatTensor).cuda(),
+            'popularity': self.popularity[idx]
         }
-
+    
     def get_data_dimension(self):
-        return self.allreply.size(0)
+        return self.allreply.size()
 
     def get_adjacent_matrix(self):
-        return torch.spmm(self.allreply, self.allreply.t())
+        adj_mat = torch.spmm(self.allreply, self.allreply.t())
+        return adj_mat / torch.max(adj_mat)
 
 dataset = DataSet()
 loader = DataLoader(dataset, batch_size=512)
-adj_matrix = dataset.get_adjacent_matrix()
+adj_matrix = dataset.get_adjacent_matrix().type(torch.FloatTensor)
+n_post, n_user = dataset.get_data_dimension()
 
-model = OurModel(dataset.get_data_dimension(), 200, 300, 300, adj_matrix)
+model = OurModel(n_user, 69, 300, 300, adj_matrix, dataset.hotreply.cuda())
 
-e_opt = optim.Adam(model.parameters(), lr=2e-4)
-m_opt = optim.Adam([{'params': model.gcn.parameters(), 'lr':1e-3},
-                    {'params': model.dense.parameters(), 'lr':1e-3}])
-e_schedule = optim.lr_scheduler.StepLR(e_opt, 20)
-m_schedule = optim.lr_scheduler.StepLR(m_opt, 20)
 criteria = nn.MSELoss()
 
 # CUDA
 model.cuda()
 criteria.cuda()
 
-def train_block(loop, optimizer):
+def expectation_block(loop, optimizer):
     avg_loss = 0.
     batch = 0
     for sample in loader:
-        onehot = sample['hot-reply']
+        y = model.gcn(model.posts)
+        loss = criteria(model.gcn.gc1.adj_matrix, torch.mm(y,y.t()))
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        avg_loss += loss
+        batch += 1
+    print(f"    #{loop+1:3d} - loss: {avg_loss/batch}")
+
+def maximization_block(loop, optimizer):
+    avg_loss = 0.
+    batch = 0
+    for sample in loader:
+        indices = sample['index']
         context = sample['context']
         popularity = sample['popularity']
-        y = model(onehot, context)
+        y = model(context, indices)
+        popularity = popularity.type(torch.FloatTensor).cuda()
         loss = criteria(popularity, y)
         optimizer.zero_grad()
         loss.backward()
@@ -70,24 +85,31 @@ def train_block(loop, optimizer):
         batch += 1
     print(f"    #{loop+1:3d} - loss: {avg_loss/batch}")
 
+lr_e = 1e-4
+lr_m = 1e-4
 print("Start training...")
-for epoch in range(50):
+for epoch in range(5):
     print(f"Epoch #{epoch+1:3d}")
     # maximization
     print("  Maximization")
     model.maximization()
-    for i in range(20):
-        train_block(i, m_opt)
+    optimizer = optim.Adam(model.parameters(), lr=lr_m)
+    schedule = optim.lr_scheduler.StepLR(optimizer, 100, gamma=.1)
+    # lr_m *= .9
+    for i in range(200):
+        maximization_block(i, optimizer)
+        schedule.step()
 
     # expectation
     print("  Expectation")
     model.expectation()
-    for i in range(50):
-        train_block(i, e_opt)
+    optimizer = optim.Adam(model.parameters(), lr=lr_e)
+    schedule = optim.lr_scheduler.StepLR(optimizer, 100, gamma=.1)
+    lr_e *= .9
+    for i in range(200):
+        expectation_block(i)
+        schedule.step()
     
-    e_schedule.step()
-    m_schedule.step()
-
     torch.save(model.state_dict(), f"../checkpoints/model_ep{epoch+1}.pt")
 
 # output = model(data)

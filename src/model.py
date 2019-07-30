@@ -7,6 +7,8 @@ import torch.optim as optim
 class GraphConvolutionLayer(nn.Module):
     def __init__(self, in_features, out_features, adj_matrix):
         super(GraphConvolutionLayer, self).__init__()
+        if type(adj_matrix) is not torch.Tensor:
+            adj_matrix = torch.from_numpy(adj_matrix).type(torch.FloatTensor)
         self.adj_matrix = nn.Parameter(adj_matrix)
         self.register_parameter("adj_matrix", self.adj_matrix)
         self.weight = nn.Parameter(torch.FloatTensor(in_features, out_features))
@@ -65,6 +67,7 @@ class TextCNN(nn.Module):
                 f'mid_conv{i+1}', 
                 nn.Conv1d(256, 256, kernel_size=3)
             )
+        self.conv3 = nn.Conv1d(256, out_channels, kernel_size=3, stride=3)
         nn.init.kaiming_normal_(self.conv1.weight)
         nn.init.kaiming_normal_(self.conv2.weight)
         for m in self.mid_layers.modules():
@@ -93,7 +96,8 @@ class TextCNN(nn.Module):
         x = self.conv2(x)
         x = F._max_pool1d(x, kernel_size=3)
         x = self.mid_layers(x)
-        x = F._max_pool1d(x, kernel_size=7)
+        x = self.conv3(x)
+        x = F._max_pool1d(x, kernel_size=4)
         return x
 
 class Dense(nn.Module):
@@ -131,12 +135,14 @@ class Dense(nn.Module):
         return x
 
 class OurModel(nn.Module):
-    def __init__(self, post_features, context_features, post_embedding, context_embedding, adj_matrix):
+    def __init__(self, post_features, context_features, post_embedding, context_embedding, adj_matrix, posts):
         super(OurModel, self).__init__()
+        self.n_node = adj_matrix.size(0) if isinstance(adj_matrix, torch.Tensor) else adj_matrix.shape[0]
+        self.n_feat = post_features
+        self.posts = posts
         self.gcn = GCN(post_features, post_embedding, adj_matrix)
         self.txcnn = TextCNN(context_features, context_embedding)
-        # self.dense = Dense(post_embedding+context_embedding)
-        self.dense = Dense(post_embedding)
+        self.dense = Dense(post_embedding+context_embedding)
     
     def maximization(self):
         self.gcn.maximization()
@@ -148,10 +154,13 @@ class OurModel(nn.Module):
         self.txcnn.expectation()
         self.dense.expectation()
 
-    def forward(self, x1, x2):
-        g = self.gcn(x1)
-        t = self.txcnn(x2)
-        d = torch.cat((g,t), 0)
+    def forward(self, x, idx):
+        g = self.gcn(self.posts)
+        t = self.txcnn(x).squeeze()
+        tt = torch.zeros(g.size()).cuda()
+        for i, s in zip(idx, t):
+            tt[i] = s
+        d = torch.cat((g,tt), 1)
         d = F.dropout(d)
         d = self.dense(d)
-        return d
+        return d[idx].squeeze()
