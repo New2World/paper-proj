@@ -68,7 +68,8 @@ class TextCNN(nn.Module):
         nn.init.kaiming_normal_(self.conv1.weight)
         nn.init.kaiming_normal_(self.conv2.weight)
         for m in self.mid_layers.modules():
-            nn.init.kaiming_normal_(m.weight)
+            if type(m) is nn.Conv1d:
+                nn.init.kaiming_normal_(m.weight)
     
     def expectation(self):
         for p in self.conv1.parameters():
@@ -134,7 +135,8 @@ class OurModel(nn.Module):
         super(OurModel, self).__init__()
         self.gcn = GCN(post_features, post_embedding, adj_matrix)
         self.txcnn = TextCNN(context_features, context_embedding)
-        self.dense = Dense(post_embedding+context_embedding)
+        # self.dense = Dense(post_embedding+context_embedding)
+        self.dense = Dense(post_embedding)
     
     def maximization(self):
         self.gcn.maximization()
@@ -148,8 +150,9 @@ class OurModel(nn.Module):
 
     def forward(self, x):
         g = self.gcn(x)
-        t = self.txcnn(x)
-        d = torch.cat((g,t), 0)
+        d = g
+        # t = self.txcnn(x)
+        # d = torch.cat((g,t), 0)
         d = F.dropout(d)
         d = self.dense(d)
         return d
