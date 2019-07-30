@@ -7,7 +7,7 @@ import torch.optim as optim
 class GraphConvolutionLayer(nn.Module):
     def __init__(self, in_features, out_features, adj_matrix):
         super(GraphConvolutionLayer, self).__init__()
-        self.adj_matrix = nn.Parameter(torch.from_numpy(adj_matrix).type(torch.sparse.FloatTensor))
+        self.adj_matrix = nn.Parameter(adj_matrix)
         self.register_parameter("adj_matrix", self.adj_matrix)
         self.weight = nn.Parameter(torch.FloatTensor(in_features, out_features))
         self.bias = nn.Parameter(torch.FloatTensor(out_features))
@@ -148,11 +148,10 @@ class OurModel(nn.Module):
         self.txcnn.expectation()
         self.dense.expectation()
 
-    def forward(self, x):
-        g = self.gcn(x)
-        d = g
-        # t = self.txcnn(x)
-        # d = torch.cat((g,t), 0)
+    def forward(self, x1, x2):
+        g = self.gcn(x1)
+        t = self.txcnn(x2)
+        d = torch.cat((g,t), 0)
         d = F.dropout(d)
         d = self.dense(d)
         return d
