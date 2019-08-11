@@ -55,10 +55,9 @@ adj_matrix = data @ data.T
 adj_matrix = adj_matrix / np.max(adj_matrix)
 st = int(data.shape[0]*.8)
 
-model = OurModel(data.shape[1], 69, 300, 300, np.eye(n_threads))
-model.load_state_dict(torch.load("../checkpoints/model_ep50.pt"))
+model = OurModel(data.shape[1], 69, 300, 300, np.eye(n_threads), torch.from_numpy(data).type(torch.FloatTensor).cuda())
+model.load_state_dict(torch.load("../checkpoints/model_ep10.pt"))
 model.eval().cuda()
-post_inp = torch.from_numpy(data).type(torch.FloatTensor).cuda()[st:]
 allcontext = np.load("../data/context_matrix.npy", allow_pickle=True)
 context_inp = np.zeros((n_threads-st, 69, 204))
 for i, th in enumerate(allcontext[st:]):
@@ -69,17 +68,18 @@ for i, th in enumerate(allcontext[st:]):
     else:
         context_inp[i] = th[:204].T
 context_inp = torch.from_numpy(context_inp).type(torch.FloatTensor).cuda()
-output = np.rint(model(post_inp, context_inp, range(st, data.shape[0])).detach().cpu().numpy().squeeze())
+output = np.rint(model(context_inp, range(st, data.shape[0])).detach().cpu().numpy().squeeze())
 learned_adj = model.gcn.gc1.adj_matrix.detach().cpu().numpy()
 partial_learned = learned_adj[:100,:100]
 # partial_learned[partial_learned<.0001] = partial_learned[partial_learned<.0001]*10
 
 # output = np.load("../res/prediction.npy")
+popular = popularity[st:]
+mae = np.mean(np.abs(popular-output))
+max_diff = np.max(np.abs(popular-output))
+min_diff = np.min(np.abs(popular-output))
 prediction = output[:100]
-popular = popularity[:100]
-mae = np.mean(np.abs(popular-prediction))
-max_diff = np.max(np.abs(popular-prediction))
-min_diff = np.min(np.abs(popular-prediction))
+popular = popular[:100]
 print(f"MAE loss: {mae}")
 print(f"min/max loss: {min_diff} / {max_diff}")
 matplotlib.rcParams['font.family'] = 'Times New Roman'
@@ -92,12 +92,12 @@ plt.scatter(x, prediction, c='b', marker='o', label='prediction')
 plt.legend()
 plt.savefig("../popularity_prediction_100.pdf", format='pdf')
 plt.clf()
-sb.heatmap(adj_matrix[:100,:100], cmap="Blues", xticklabels=10, yticklabels=10)
-plt.title("initial adjacent matrix")
-plt.xlabel("thread ID")
-plt.ylabel("thread ID")
-plt.savefig("../initial_adjacent_matrix.pdf", format='pdf')
-plt.clf()
+# sb.heatmap(adj_matrix[:100,:100], cmap="Blues", xticklabels=10, yticklabels=10)
+# plt.title("initial adjacent matrix")
+# plt.xlabel("thread ID")
+# plt.ylabel("thread ID")
+# plt.savefig("../initial_adjacent_matrix.pdf", format='pdf')
+# plt.clf()
 sb.heatmap(partial_learned, cmap="Blues", xticklabels=10, yticklabels=10)
 plt.title("learned adjacent matrix")
 plt.xlabel("thread ID")

@@ -1,119 +1,165 @@
+import os
 import numpy as np
+from sklearn import datasets
+
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset, DataLoader
 
-from model import OurModel
+import seaborn as sb
+import matplotlib.pyplot as plt
 
-class DataSet(Dataset):
-    def __init__(self, validation=.2):
-        self.allreply = torch.from_numpy(np.load("../data/onehot_encoding.npy")).type(torch.FloatTensor)
-        self.hotreply = torch.from_numpy(np.load("../data/first_5_reply_matrix.npy")).type(torch.FloatTensor)
-        self.popularity = np.load("../data/popularity.npy")
-        self.context = np.load("../data/context_matrix.npy", allow_pickle=True)
-        self.length = self.hotreply.size(0)
-        self.validation = 1-validation
-        self.fixlen = 204
-    
-    def __len__(self):
-        return int(self.length * self.validation)
-    
-    def __getitem__(self, idx):
-        context = self.context[idx]
-        if context.shape[0] == 0:
-            context = np.zeros((self.fixlen,69))
-        elif context.shape[0] < self.fixlen:
-            context = np.vstack((context, np.zeros((self.fixlen-context.shape[0],69))))
-        elif context.shape[0] > self.fixlen:
-            context = context[:self.fixlen]
-        return {
-            'index': idx,
-            # 'hotreply': self.hotreply[idx].cuda(),
-            # 'allreply': self.allreply[idx].cuda(),
-            'context': torch.from_numpy(context.T).type(torch.FloatTensor).cuda(),
-            'popularity': self.popularity[idx]
-        }
-    
-    def get_data_dimension(self):
-        return self.allreply.size()
+from model import GCN
 
-    def get_adjacent_matrix(self):
-        adj_mat = torch.spmm(self.allreply, self.allreply.t())
-        return adj_mat / torch.max(adj_mat)
+def get_knn_graph(data, k):
+    n_samples = data.size(0)
+    A = torch.mm(data, data.t())
+    A_sort = torch.argsort(A, dim=1, descending=True)
+    mask = A.clone()
+    mask[[[i]*k for i in range(n_samples)], A_sort[:,:k]] = 0
+    graph = A-mask
+    return graph / torch.max(graph)
 
-dataset = DataSet()
-loader = DataLoader(dataset, batch_size=512)
-adj_matrix = dataset.get_adjacent_matrix().type(torch.FloatTensor)
-n_post, n_user = dataset.get_data_dimension()
+def split_dataset(data, label, valid_size=.2):
+    n_samples = data.size(0)
+    if isinstance(valid_size, int):
+        sz = valid_size
+    else:
+        sz = int(n_samples*valid_size)
+    label_indices = torch.argsort(label)
+    span = n_samples // sz
+    valid_id = label_indices[::span]
+    train_id = list(set(range(n_samples))-set(valid_id))
+    return train_id, valid_id
 
-model = OurModel(n_user, 69, 300, 300, adj_matrix, dataset.hotreply.cuda())
+def find_ckpt(path, name):
+    epo = 0
+    ckpt_list = list(os.walk(path))[0][2]
+    for ckpt_file in ckpt_list:
+        if ckpt_file.startswith(name) and ckpt_file.endswith('.pt'):
+            ep = int(ckpt_file[:-3].split('-')[1])
+            if ep > epo:
+                epo = ep
+    return f'{name}-{epo}.pt'
 
-criteria = nn.MSELoss()
+def save_ckpt(path, name, model, optimizer, scheduler, epoch, step):
+    torch.save({
+        'epoch': epoch, 
+        'step': step, 
+        'model_state_dict': model.state_dict(), 
+        'optimizer_state_dict': optimizer.state_dict(), 
+        'scheduler_state_dict': scheduler.state_dict(), 
+    }, os.path.join(path, f'{name}-{epoch}.pt'))
 
-# CUDA
-model.cuda()
-criteria.cuda()
+def load_ckpt(path, name, model, optimizer=None, scheduler=None, epoch=None):
+    if epoch is not None:
+        ckpt_file = f'{name}-{epoch}.pt'
+    else:
+        ckpt_file = find_ckpt(path, name)
+    state = torch.load(os.path.join(path, ckpt_file))
+    model.load_state_dict(state['model_state_dict'])
+    if optimizer is not None:
+        optimizer.load_state_dict(state['optimizer_state_dict'])
+    if scheduler is not None:
+        scheduler.load_state_dict(state['scheduler_state_dict'])
+    return state['epoch'], state['step']
 
-def expectation_block(loop, optimizer):
-    avg_loss = 0.
-    batch = 0
-    for sample in loader:
-        y = model.gcn(model.posts)
-        loss = criteria(model.gcn.gc1.adj_matrix, torch.mm(y,y.t()))
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        avg_loss += loss
-        batch += 1
-    print(f"    #{loop+1:3d} - loss: {avg_loss/batch}")
+def training_loop(model, data, label, train_indices, valid_indices, lr=1e-3, epoch=100, path='../checkpoints', name='model', resume=False):
+    model.train().cuda()
+    nll = nn.NLLLoss().cuda()
+    mse = nn.MSELoss().cuda()
+    # optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam([
+        {'params': model.q, 'lr': lr}, 
+        {'params': model.gc1.parameters(), 'lr': lr},
+        {'params': model.gc2.parameters(), 'lr': lr},
+        {'params': model.fc1.parameters(), 'lr': lr},
+        {'params': model.fc2.parameters(), 'lr': lr},
+        {'params': model.fc3.parameters(), 'lr': lr},
+    ])
+    scheduler = optim.lr_scheduler.StepLR(optimizer, 100)
+    lb = label[train_indices]
+    epo = 0
+    last_loss = 0.
+    if resume:
+        epo = load_ckpt(path, name, model, optimizer, scheduler)
+    for ep in range(epo, epoch):
+        avg_loss = 0.
+        model.maximization()
+        count = 0
+        for i in range(100):
+            y = model(data)[0][train_indices]
+            # print(y)
+            loss = nll(y, lb)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            avg_loss += loss
+            count = torch.sum(torch.argmax(y, dim=1) != lb)
+        scheduler.step()
+        print(f'Ep.{ep+1} - loss: {avg_loss/100.:.6f} - err: {count}')
+        if avg_loss == last_loss:
+            break
+        last_loss = avg_loss
+        if (ep+1) % 50 == 0:
+            save_ckpt(path, name, model, optimizer, scheduler, ep+1, ep+1)
+        if ep+1 == epoch:
+            break
+        model.expectation()
+        for i in range(100):
+            y, m = model(data)
+            nll_loss = nll(y[train_indices], lb)
+            adj = .5 * model.gc1.adj_matrix + .5 * model.gc2.adj_matrix
+            print(m)
+            print(adj)
+            mse_loss = mse(adj,m)
+            loss = nll_loss + 1e-2 * mse_loss
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        # print(model.q)
+        # print(f'Ep.{ep+1} - loss: {avg_loss/100.:.6f} - mse loss: {avg_loss_mse/100.:.6f}')
 
-def maximization_block(loop, optimizer):
-    avg_loss = 0.
-    batch = 0
-    for sample in loader:
-        indices = sample['index']
-        context = sample['context']
-        popularity = sample['popularity']
-        y = model(context, indices)
-        popularity = popularity.type(torch.FloatTensor).cuda()
-        loss = criteria(popularity, y)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        avg_loss += loss
-        batch += 1
-    print(f"    #{loop+1:3d} - loss: {avg_loss/batch}")
+data, label = datasets.load_digits(return_X_y=True)
+data_max = np.max(data)
+data = torch.from_numpy(data).type(torch.FloatTensor).cuda() / data_max
+label = torch.from_numpy(label).type(torch.LongTensor).cuda()
+train_id, valid_id = split_dataset(data, label)
 
-lr_e = 1e-4
-lr_m = 1e-4
-print("Start training...")
-for epoch in range(5):
-    print(f"Epoch #{epoch+1:3d}")
-    # maximization
-    print("  Maximization")
-    model.maximization()
-    optimizer = optim.Adam(model.parameters(), lr=lr_m)
-    schedule = optim.lr_scheduler.StepLR(optimizer, 100, gamma=.1)
-    # lr_m *= .9
-    for i in range(200):
-        maximization_block(i, optimizer)
-        schedule.step()
+clfr = GCN(64, 128, 128, 10, get_knn_graph(data, 8))
+training_loop(clfr, data, label, train_id, valid_id, lr=2e-3, epoch=200, name='digits')
 
-    # expectation
-    print("  Expectation")
-    model.expectation()
-    optimizer = optim.Adam(model.parameters(), lr=lr_e)
-    schedule = optim.lr_scheduler.StepLR(optimizer, 100, gamma=.1)
-    lr_e *= .9
-    for i in range(200):
-        expectation_block(i)
-        schedule.step()
-    
-    torch.save(model.state_dict(), f"../checkpoints/model_ep{epoch+1}.pt")
+clfr.eval()
+yy = torch.argmax(clfr(data)[0], dim=1)
+train_acc = torch.sum(yy[train_id]==label[train_id]).cpu().numpy()*1./len(train_id)
+valid_acc = torch.sum(yy[valid_id]==label[valid_id]).cpu().numpy()*1./len(valid_id)
+print(f'training set accuracy: {train_acc:.6f}')
+print(f'validation set accuracy: {valid_acc:.6f}')
 
-# output = model(data)
-# np.save("output.npy", output.detach().numpy())
-# print("output saved")
-# torch.save(model.state_dict(), "../checkpoints/model.pt")
-# print("model saved")
+init_matrix = get_knn_graph(data,8).cpu().numpy()
+init_matrix = init_matrix / np.max(init_matrix)
+adj_matrix = clfr.gc1.adj_matrix.detach()
+adj_matrix = adj_matrix / torch.max(adj_matrix)
+adj_matrix = adj_matrix.cpu().numpy()
+
+plt.subplot(121)
+sb.heatmap(init_matrix[:100,:100], cmap='Blues')
+
+plt.subplot(122)
+sb.heatmap(adj_matrix[:100,:100]-init_matrix[:100,:100], cmap='Blues')
+plt.show()
+
+# nll = nn.NLLLoss()
+# mse = nn.MSELoss()
+# clfr.maximization()
+# optimizer = optim.Adam(clfr.parameters(), lr=1e-3)
+# emb, y = clfr(data)
+# nll_loss = nll(y[train_id], label[train_id])
+# mse_loss = mse(clfr.adj_matrix, emb)
+# loss = nll_loss
+# optimizer.zero_grad()
+# loss.backward()
+# print(clfr.fc2.weight.grad)
+# optimizer.step()
