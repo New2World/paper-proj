@@ -20,7 +20,7 @@ def get_knn_graph(data, k):
     mask = A.clone()
     mask[[[i]*k for i in range(n_samples)], A_sort[:,:k]] = 0
     graph = A-mask
-    return graph / torch.max(graph)
+    return graph# / torch.max(graph)
 
 def split_dataset(data, label, valid_size=.2):
     n_samples = data.size(0)
@@ -72,9 +72,9 @@ def training_loop(model, data, label, train_indices, valid_indices, lr=1e-3, epo
     mse = nn.MSELoss().cuda()
     # optimizer = optim.Adam(model.parameters(), lr=lr)
     optimizer = optim.Adam([
-        {'params': model.q, 'lr': lr}, 
-        {'params': model.gc1.parameters(), 'lr': lr},
-        {'params': model.gc2.parameters(), 'lr': lr},
+        {'params': model.q, 'lr': lr*.1}, 
+        {'params': model.gc1.parameters(), 'lr': lr*.1},
+        {'params': model.gc2.parameters(), 'lr': lr*.1},
         {'params': model.fc1.parameters(), 'lr': lr},
         {'params': model.fc2.parameters(), 'lr': lr},
         {'params': model.fc3.parameters(), 'lr': lr},
@@ -87,11 +87,11 @@ def training_loop(model, data, label, train_indices, valid_indices, lr=1e-3, epo
         epo = load_ckpt(path, name, model, optimizer, scheduler)
     for ep in range(epo, epoch):
         avg_loss = 0.
-        model.maximization()
         count = 0
-        for i in range(100):
+        model.maximization()
+        for i in range(50):
             y = model(data)[0][train_indices]
-            # print(y)
+            print(y)
             loss = nll(y, lb)
             optimizer.zero_grad()
             loss.backward()
@@ -108,12 +108,12 @@ def training_loop(model, data, label, train_indices, valid_indices, lr=1e-3, epo
         if ep+1 == epoch:
             break
         model.expectation()
-        for i in range(100):
+        for i in range(200):
             y, m = model(data)
             nll_loss = nll(y[train_indices], lb)
-            adj = .5 * model.gc1.adj_matrix + .5 * model.gc2.adj_matrix
-            print(m)
-            print(adj)
+            adj = model.gc1.adj_matrix
+            # print(m)
+            # print(adj)
             mse_loss = mse(adj,m)
             loss = nll_loss + 1e-2 * mse_loss
             optimizer.zero_grad()

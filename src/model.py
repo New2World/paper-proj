@@ -31,7 +31,8 @@ class GraphConvolutionLayer(nn.Module):
 class GCN(nn.Module):
     def __init__(self, in_features, hidden_features, out_features, n_classes, adj_matrix):
         super(GCN, self).__init__()
-        self.q = nn.Parameter(torch.FloatTensor(out_features, out_features))
+        n_samples = adj_matrix.size(0)
+        self.q = nn.Parameter(torch.FloatTensor(out_features, n_samples))
         self.gc1 = GraphConvolutionLayer(in_features, hidden_features, adj_matrix)
         self.gc2 = GraphConvolutionLayer(hidden_features, out_features, adj_matrix)
         self.fc1 = nn.Linear(out_features, 256)
@@ -76,5 +77,5 @@ class GCN(nn.Module):
         x = self.fc3(x)
         x = F.log_softmax(x, dim=1)
         m = torch.mm(h, self.q)
-        m = torch.mm(m, h.t())
+        m = torch.sigmoid(m)
         return x, m
